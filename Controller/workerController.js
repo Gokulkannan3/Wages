@@ -2,6 +2,15 @@ const pool = require("../config/db")
 const { cloudinary } = require("../config/cloudinaryconfig")
 const fal = require("@fal-ai/serverless-client")
 
+async function mockCompareFaces(inputImageUrl, storedImageUrl) {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  const isMatch = Math.random() < 0.9; 
+  const confidence = isMatch ? (0.8 + Math.random() * 0.2) : (0.1 + Math.random() * 0.1);
+
+  return confidence > 0.7;
+}
+
 exports.addWorker = async (req, res) => {
   const { name, phone, village, salary, images } = req.body
   const query = `
@@ -41,46 +50,54 @@ exports.getWorkers = async (req, res) => {
   }
 }
 
-// NEW: Simulate worker identification based on image URL
 exports.identifyWorker = async (req, res) => {
-  const { imageUrl } = req.body // This imageUrl is already from Cloudinary upload
+  const { imageUrl } = req.body
   if (!imageUrl) {
     return res.status(400).json({ error: "Image URL is required for identification." })
   }
 
   try {
-    let falResponse
-    try {
-      // Using a face detection model as a more relevant placeholder for AI processing
-      falResponse = await fal.run("fal-ai/face-detection", {
-        input: {
-          image_url: imageUrl,
-        },
-      })
-      console.log("Fal AI Face Detection Response:", falResponse)
-      // You could check falResponse.faces to see if faces were detected
-    } catch (falError) {
-      console.warn("Fal AI processing failed (this is a simulation step):", falError.message)
-      // Continue with simulated identification even if AI processing has issues,
-      // to ensure a worker is "identified" as per user's request to fix "not identified".
+    const query = `SELECT id, name, phone, village, images FROM workers;`
+    const result = await pool.query(query)
+    const workers = result.rows.map(row => ({
+      ...row,
+      images: row.images ? JSON.parse(row.images) : [],
+    }));
+
+    let identifiedWorker = null;
+    let matchingImage = null;
+
+    for (const worker of workers) {
+      for (const storedImage of worker.images) {
+        const isMatch = await mockCompareFaces(imageUrl, storedImage); 
+        
+        if (isMatch) {
+          identifiedWorker = worker;
+          matchingImage = storedImage;
+          break;
+        }
+      }
+      if (identifiedWorker) {
+        break;
+      }
     }
 
-    const query = `SELECT id, name, phone, village FROM workers;`
-    const result = await pool.query(query)
-    const workers = result.rows
-
-    if (workers.length > 0) {
-      // Always pick the first worker for simulation purposes to ensure identification
-      const identifiedWorker = workers[0]
-
+    if (identifiedWorker) {
+      delete identifiedWorker.images; 
+      
       res.json({
         success: true,
         worker: identifiedWorker,
-        message: "Worker identified (simulated via AI processing).",
+        matchingImage: matchingImage,
+        message: `Worker ${identifiedWorker.name} identified (Simulated Match).`,
       })
     } else {
-      res.status(404).json({ success: false, message: "No workers registered to identify against." })
+      res.status(404).json({ 
+        success: false, 
+        message: "No registered worker found matching the provided image.",
+      });
     }
+
   } catch (err) {
     console.error("Error identifying worker (backend):", err.message)
     res.status(500).json({ error: err.message })
