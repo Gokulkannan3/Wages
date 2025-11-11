@@ -6,7 +6,9 @@ const apiRoutes = require("./Router/api") // Corrected path
 const app = express()
 const port = process.env.PORT || 3000
 
-app.use(cors())
+app.use(cors({
+  origin: '*'
+}));
 app.use(express.json({ limit: "50mb" })) // Increased limit for image data
 app.use(express.urlencoded({ limit: "50mb", extended: true })) // For URL-encoded bodies
 
