@@ -7,7 +7,9 @@ const imageUploadController = require("../Controller/imageUploadController")
 // Worker routes
 router.post("/workers", workerController.addWorker)
 router.get("/workers", workerController.getWorkers)
-router.post("/identify-worker", workerController.identifyWorker) // NEW: Route for worker identification
+router.post("/identify-worker", workerController.identifyWorker)
+router.put("/workers/:id", workerController.updateWorker);
+router.delete("/workers/:id", workerController.deleteWorker);
 
 // Attendance routes
 router.post("/attendance/:id", attendanceController.markAttendance) // Mark attendance by worker ID

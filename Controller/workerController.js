@@ -103,3 +103,70 @@ exports.identifyWorker = async (req, res) => {
     res.status(500).json({ error: err.message })
   }
 }
+
+// workersController.js  (add these two functions)
+
+exports.updateWorker = async (req, res) => {
+  const { id } = req.params;
+  const { name, phone, village, per_day_salary, images } = req.body;
+
+  const query = `
+    UPDATE workers
+    SET name = $1, phone = $2, village = $3, per_day_salary = $4, images = $5
+    WHERE id = $6
+    RETURNING *;
+  `;
+
+  try {
+    const result = await pool.query(query, [
+      name,
+      phone,
+      village,
+      per_day_salary,
+      JSON.stringify(images),
+      id,
+    ]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Worker not found" });
+    }
+
+    // Return the fresh row (with attendance re-joined)
+    const refreshed = await pool.query(
+      `SELECT w.*, array_agg(a.attendance_date) FILTER (WHERE a.attendance_date IS NOT NULL) AS attendance
+       FROM workers w
+       LEFT JOIN attendance a ON w.id = a.worker_id
+       WHERE w.id = $1
+       GROUP BY w.id`,
+      [id]
+    );
+
+    const row = refreshed.rows[0];
+    res.json({
+      ...row,
+      attendance: row.attendance || [],
+      images: row.images ? JSON.parse(row.images) : [],
+    });
+  } catch (err) {
+    console.error("Error updating worker:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.deleteWorker = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // optional: delete attendance records first
+    await pool.query(`DELETE FROM attendance WHERE worker_id = $1`, [id]);
+
+    const result = await pool.query(`DELETE FROM workers WHERE id = $1 RETURNING *`, [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Worker not found" });
+    }
+    res.json({ success: true, message: "Worker deleted" });
+  } catch (err) {
+    console.error("Error deleting worker:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
